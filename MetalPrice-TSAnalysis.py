@@ -2,6 +2,7 @@ import pandas as pd
 import plotly.graph_objs as go
 import plotly.offline as pyo
 from plotly.subplots import make_subplots
+import numpy as np
 
 # Read data from Excel file
 file_path = 'data/MetalPrices.xlsx'  
@@ -143,6 +144,8 @@ plt.legend()
 plt.tight_layout()
 plt.show()
 
+
+
 # Plot each differenced metal field separately
 for column in differenced_df_with_date.columns[1:]:
     plt.figure(figsize=(10, 4))
@@ -152,6 +155,25 @@ for column in differenced_df_with_date.columns[1:]:
     plt.ylabel('Differenced Price')
     plt.tight_layout()
     plt.show()
+
+
+##Log e transform
+df['gold'] = np.log(df['gold'])
+df['silver'] = np.log(df['silver'])
+df['plat'] = np.log(df['plat'])
+df['pall'] = np.log(df['pall'])
+
+# Plot each transformed metal field separately
+for column in df.columns[1:]:
+    plt.figure(figsize=(10, 4))
+    plt.plot(df.iloc[:, 0], df[column])
+    plt.title(f'Transformed {column} Prices')
+    plt.xlabel('Date')
+    plt.ylabel('Log_e Price')
+    plt.tight_layout()
+    plt.show()
+
+
 
 ###Lag Selection through ACF and PACF
 # Plot ACF and PACF for each metal price
@@ -258,13 +280,12 @@ plt.legend()
 plt.tight_layout()
 plt.show()
 
+##Experimenting with ARIMA
 
-### Lag selection through AIC, BIC
+### Best Lag selection through AIC, BIC  
 
-    
-# p and q values to iterate over
-p_values = range(0, 5)  
-q_values = range(0, 5)  
+p_values = range(0, 10)  
+q_values = range(0, 10)  
 
 best_aic = float('inf')
 best_bic = float('inf')
@@ -274,25 +295,85 @@ best_q = 0
 # Iterate over different p and q values to find the best model based on AIC and BIC
 for p in p_values:
     for q in q_values:
-        for column in differenced_df_with_date.columns[1:]:
-            try:
-                model = ARIMA(differenced_df_with_date[column], order=(p, 0, q))
-                results = model.fit()
-                aic = results.aic
-                bic = results.bic
+        try:
+            model = ARIMA(differenced_df_with_date['gold'], order=(p, 1, q))
+            results = model.fit()
+            aic = results.aic
+            bic = results.bic
                 
-                if aic < best_aic:
-                    best_aic = aic
-                    best_p = p
-                    best_q = q
+            if aic < best_aic:
+                best_aic = aic
+                best_p = p
+                best_q = q
                 
-                if bic < best_bic:
-                    best_bic = bic
-                    best_p_bic = p
-                    best_q_bic = q
+            if bic < best_bic:
+                best_bic = bic
+                best_p_bic = p
+                best_q_bic = q
                     
-            except:
-                continue
+        except:
+            continue
 
-print(f"Best AIC: p = {best_p}, q = {best_q}, AIC = {best_aic}")
-print(f"Best BIC: p = {best_p_bic}, q = {best_q_bic}, BIC = {best_bic}")
+print(f"Best AIC Gold: p = {best_p}, q = {best_q}, AIC = {best_aic}")
+print(f"Best BIC Gold: p = {best_p_bic}, q = {best_q_bic}, BIC = {best_bic}")
+
+##Ploting the best ARIMA order for each metal price field
+model = ARIMA(differenced_df_with_date['gold'], order=(5, 1, 2))  
+results = model.fit()
+
+# Get the fitted values
+fitted_values = results.fittedvalues
+
+plt.figure(figsize=(10, 4))
+plt.plot(differenced_df_with_date['gold'], label='Actual', color='blue')
+plt.plot(fitted_values, label='Fitted', color='orange')
+plt.title("Gold - AR(2) Model")
+plt.xlabel('Date')
+plt.ylabel('Price')
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+
+
+###Experimenting with SARIMA
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+import itertools
+
+# Best selection for p, d, q, P, D, Q
+p_values = range(0, 5)  # Non-seasonal AR order
+d_values = range(0, 2)  # Non-seasonal differencing
+q_values = range(0, 5)  # Non-seasonal MA order
+
+P_values = range(0, 5)  # Seasonal AR order
+D_values = range(0, 2)  # Seasonal differencing
+Q_values = range(0, 5)  # Seasonal MA order
+m = 12  # monthly data, so m = 12 for annual seasonality
+
+# Generate combinations of p, d, q, P, D, Q
+parameter_combinations = list(itertools.product(p_values, d_values, q_values, P_values, D_values, Q_values))
+
+best_aic = float('inf')
+best_bic = float('inf')
+best_params = None
+
+# Finding the model with the lowest AIC and BIC
+for param in parameter_combinations:
+    try:
+        model = SARIMAX(df['gold'], order=(param[0], param[1], param[2]), seasonal_order=(param[3], param[4], param[5], m))
+        results = model.fit()
+        aic = results.aic
+        bic = results.bic
+        
+        if aic < best_aic:
+            best_aic = aic
+            best_params = param
+        
+        if bic < best_bic:
+            best_bic = bic
+
+    except:
+        continue
+
+print(f"Best AIC GOLD: {best_aic}, Best BIC: {best_bic}")
+print(f"Best Parameters GOLD (p, d, q, P, D, Q): {best_params}")
